@@ -46,7 +46,10 @@ public final class CapsLEDModeCoordinator {
         return .updated(try controller.setMode(mode))
     }
 
-    func acquireRunOwnership() throws -> PersistentLEDOwnership {
+    /// Reserves LED ownership for a foreground operation such as `run` or
+    /// `watch`. The caller must retain the token through its final Auto write;
+    /// releasing sooner would let a menu or CLI action race with cleanup.
+    func acquireTemporaryOwnership() throws -> PersistentLEDOwnership {
         try persistentOnManager.acquireExclusiveOwnership()
     }
 }

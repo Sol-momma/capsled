@@ -11,7 +11,9 @@ would otherwise be unused.
 
 - macOS 14 or newer
 - A keyboard whose Caps Lock LED is exposed through macOS's HID event system
-- No root privileges, Accessibility permission, or Input Monitoring permission
+- No root privileges or Accessibility permission
+- Input Monitoring permission is required only for the experimental `watch`
+  command; `on`, `off`, `auto`, and `run` do not require it
 
 ## Install
 
@@ -81,6 +83,7 @@ capsled on
 capsled off
 capsled auto
 capsled run -- npm test
+capsled watch
 ```
 
 - `on` starts one background maintainer and returns. It repairs a macOS `Off`
@@ -91,6 +94,12 @@ capsled run -- npm test
 - `run` keeps the LED on while the child command runs, repairs a macOS `Off`
   overwrite, then returns the LED to `auto`. It replaces a prior persistent
   `on` rather than restoring it after the child exits.
+- `watch` preserves the current LED state until the first physical Caps Lock
+  press, toggles it on each press, and returns the LED to `auto` when stopped.
+  It also replaces a prior persistent `on` rather than restoring it on exit.
+  It reads the raw Caps Lock HID usage instead of a transformed Control key
+  code so the two can be distinguished on supported hardware; it does not alter
+  or suppress either key event. Raw detection remains experimental.
 
 For example:
 
@@ -99,6 +108,18 @@ capsled run -- sleep 30
 ```
 
 The wrapped command's exit status is preserved.
+
+To use the experimental watcher, run it in the foreground and stop it with
+Control-C:
+
+```sh
+capsled watch
+```
+
+On first use, macOS may ask for Input Monitoring access. Enable the executable
+in **System Settings > Privacy & Security > Input Monitoring**, then run the
+command again. This permission is necessary even though the watcher accepts
+only Caps Lock input values and opens the keyboard non-exclusively.
 
 ## Update and uninstall
 
@@ -122,22 +143,28 @@ rm "$HOME/.local/bin/capsled" # Replace this path if a custom directory was used
 
 | Environment | Keyboard | Result |
 | --- | --- | --- |
-| Apple Silicon, macOS 26.5.1 | Built-in, Caps Lock remapped to Control | Verified |
+| Apple Silicon, macOS 26.5.1 | Built-in, Caps Lock remapped to Control | LED control and raw `watch` toggle verified |
 | Intel Mac | Built-in | Universal Binary builds; hardware not verified |
 | External keyboards | Varies | Not verified |
 
 When no built-in keyboard can be identified, `capsled` falls back to every
 keyboard service. This may light an attached keyboard as well.
 
+Raw physical-key detection used by `watch` is still experimental. It has been
+verified only on the built-in Apple Silicon keyboard listed above; other
+hardware remains unverified.
+
 ## Important limitations
 
 - This project uses the unsupported `HIDCapsLockLED` event-system property from
   Apple's IOHIDFamily implementation. It may stop working in a future macOS
   release.
-- `on` and `run` check the effective LED state every 10 ms. A macOS overwrite
-  can still produce a very short dark interval before it is repaired.
-- The background `on` maintainer and `run` cannot restore `auto` after SIGKILL,
-  a crash, or power loss. Run `capsled auto` to recover.
+- `on`, `run`, and the On state of `watch` check the effective LED state every
+  10 ms.
+  A macOS overwrite can still produce a very short dark interval before it is
+  repaired.
+- The background `on` maintainer, `run`, and `watch` cannot restore `auto` after
+  SIGKILL, a crash, or power loss. Run `capsled auto` to recover.
 - The menu status reports the last action completed in the app. Later CLI
   changes are not mirrored as a continuously synchronized state indicator.
 - Release binaries are ad-hoc signed but are not Developer ID signed or
@@ -172,6 +199,15 @@ swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
 swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
   -o .build/capsled-on-persistence-check
 .build/capsled-on-persistence-check
+```
+
+The watch lifecycle check also uses fake keyboard and LED backends and does not
+touch hardware:
+
+```sh
+swiftc Sources/CapsLEDCore/*.swift Checks/WatchBehaviorCheck.swift \
+  -o .build/capsled-watch-behavior-check
+.build/capsled-watch-behavior-check
 ```
 
 Security reports are described in [SECURITY.md](SECURITY.md). Contributions are

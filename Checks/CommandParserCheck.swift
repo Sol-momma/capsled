@@ -7,12 +7,14 @@ enum CommandParserCheck {
         let off = try CLIParser.parse(["off"])
         let automatic = try CLIParser.parse(["auto"])
         let run = try CLIParser.parse(["run", "--", "npm", "test"])
+        let watch = try CLIParser.parse(["watch"])
         let help = try CLIParser.parse(["--help"])
 
         precondition(on == .set(.on))
         precondition(off == .set(.off))
         precondition(automatic == .set(.automatic))
         precondition(run == .run(["npm", "test"]))
+        precondition(watch == .watch)
         precondition(help == .help)
 
         do {
@@ -21,6 +23,15 @@ enum CommandParserCheck {
         } catch is CLIParseError {
             // Expected: argument validation must finish before any LED backend
             // is created, so malformed commands can never alter hardware state.
+        }
+
+        do {
+            _ = try CLIParser.parse(["watch", "unexpected"])
+            preconditionFailure("watch arguments must fail")
+        } catch is CLIParseError {
+            // `watch` intentionally has no event-filter options yet. Keeping the
+            // surface strict prevents an ignored argument from suggesting that a
+            // different keyboard or permission behavior was selected.
         }
 
         print("Command parser checks passed")

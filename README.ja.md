@@ -10,7 +10,8 @@ macOSメニューバーアプリ兼CLIです。論理的なCaps Lock状態は変
 
 - macOS 14以降
 - macOSのHIDイベントシステムからCaps Lock LEDを操作できるキーボード
-- root権限、アクセシビリティ権限、入力監視権限は不要
+- root権限、アクセシビリティ権限は不要
+- 入力監視権限が必要なのは実験的な`watch`だけ。`on`、`off`、`auto`、`run`には不要
 
 ## インストール
 
@@ -79,6 +80,7 @@ capsled on
 capsled off
 capsled auto
 capsled run -- npm test
+capsled watch
 ```
 
 - `on`はバックグラウンドmaintainerを1つ起動して終了します。`off`、`auto`、`run`で
@@ -88,6 +90,11 @@ capsled run -- npm test
 - `auto`はmaintainerを停止してLED制御をmacOSへ戻します。
 - `run`は子コマンドの実行中に点灯を維持し、macOSによる`Off`上書きを修復して、
   終了後に`auto`へ戻します。先に`on`を実行していた場合、その常時点灯は復元しません。
+- `watch`は最初の物理Caps Lock押下まで現在のLED状態を維持し、押すたびにLEDを
+  切り替え、終了時に`auto`へ戻します。先に`on`を実行していた場合、その常時点灯は
+  復元しません。raw HIDのCaps Lock usageを読むため、
+  Caps LockをControlへ変更した環境でも、対応ハードウェアでは物理Controlと
+  区別できます。キー入力の変更・遮断は行いません。raw検出は実験段階です。
 
 例：
 
@@ -96,6 +103,17 @@ capsled run -- sleep 30
 ```
 
 ラップしたコマンドの終了コードは維持されます。
+
+実験的な監視を使う場合はフォアグラウンドで実行し、Control-Cで終了します。
+
+```sh
+capsled watch
+```
+
+初回はmacOSが入力監視権限を求める場合があります。**システム設定 >
+プライバシーとセキュリティ > 入力監視**で実行ファイルを許可してから、コマンドを
+再実行してください。Caps Lockの入力値だけを非exclusiveで受け取りますが、権限は
+必要です。
 
 ## 更新・アンインストール
 
@@ -119,21 +137,24 @@ rm "$HOME/.local/bin/capsled" # 任意の配置先を使った場合は、その
 
 | 環境 | キーボード | 結果 |
 | --- | --- | --- |
-| Apple Silicon、macOS 26.5.1 | 内蔵、Caps LockをControlへ変更 | 実機確認済み |
+| Apple Silicon、macOS 26.5.1 | 内蔵、Caps LockをControlへ変更 | LED制御とraw `watch`切替を実機確認済み |
 | Intel Mac | 内蔵 | Universal Binary生成済み、実機未確認 |
 | 外付けキーボード | 機種依存 | 未確認 |
 
 内蔵キーボードを識別できない場合は、すべてのキーボードサービスを対象にします。
 そのため、外付けキーボードのLEDも点灯する可能性があります。
 
+`watch`が使うraw物理キー検出は実験段階です。上記Apple Siliconの内蔵キーボード
+だけで実機確認済みで、ほかのハードウェアは未確認です。
+
 ## 重要な制限
 
 - Apple IOHIDFamily実装の非公開`HIDCapsLockLED`プロパティを使用します。将来の
   macOSで動作しなくなる可能性があります。
-- `on`と`run`は10msごとに実際のLED状態を確認します。macOSによる上書きから
-  再点灯まで、ごく短時間だけ消灯する可能性があります。
-- バックグラウンドの`on` maintainerと`run`は、SIGKILL、クラッシュ、電源断では
-  `auto`へ戻せません。その場合は`capsled auto`を実行してください。
+- `on`、`run`、`watch`の点灯中は10msごとに実際のLED状態を確認します。macOSによる
+  上書きから再点灯まで、ごく短時間だけ消灯する可能性があります。
+- バックグラウンドの`on` maintainer、`run`、`watch`は、SIGKILL、クラッシュ、
+  電源断では`auto`へ戻せません。その場合は`capsled auto`を実行してください。
 - メニューの状態欄はアプリで最後に完了した操作を表示します。その後のCLI操作を
   常時同期する状態表示ではありません。
 - 配布バイナリはad-hoc署名済みですが、Developer ID署名・公証は未実施です。
@@ -167,6 +188,14 @@ swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
 swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
   -o .build/capsled-on-persistence-check
 .build/capsled-on-persistence-check
+```
+
+`watch`のライフサイクル確認も、キーボードとLEDのfakeを使うため実機には触れません。
+
+```sh
+swiftc Sources/CapsLEDCore/*.swift Checks/WatchBehaviorCheck.swift \
+  -o .build/capsled-watch-behavior-check
+.build/capsled-watch-behavior-check
 ```
 
 脆弱性の報告方法は[SECURITY.md](SECURITY.md)を参照してください。Issueと

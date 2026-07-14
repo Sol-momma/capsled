@@ -21,7 +21,9 @@ public enum CapsLEDApplication {
             return execute(
                 arguments: arguments,
                 controller: controller,
-                persistentOnManager: persistentOnManager
+                persistentOnManager: persistentOnManager,
+                watcherFactory: { RawHIDPhysicalCapsLockWatcher() },
+                terminationWaiterFactory: { TerminationSignalWaiter() }
             )
         } catch {
             writeError("capsled: \(error.localizedDescription)")
@@ -60,7 +62,9 @@ public enum CapsLEDApplication {
     static func execute(
         arguments: [String],
         controller: CapsLockLEDControlling,
-        persistentOnManager: PersistentLEDOnManaging
+        persistentOnManager: PersistentLEDOnManaging = InactivePersistentLEDOnManager(),
+        watcherFactory: () -> PhysicalCapsLockWatching = { RawHIDPhysicalCapsLockWatcher() },
+        terminationWaiterFactory: () -> TerminationWaiting = { TerminationSignalWaiter() }
     ) -> Int32 {
         do {
             let coordinator = CapsLEDModeCoordinator(
@@ -80,17 +84,86 @@ public enum CapsLEDApplication {
                 }
                 return 0
             case let .run(command):
-                let ownership = try coordinator.acquireRunOwnership()
+                let ownership = try coordinator.acquireTemporaryOwnership()
                 defer { ownership.release() }
                 return try run(command, controller: controller)
+            case .watch:
+                // Hold the shared operation lock through watch's final Auto
+                // write. Merely stopping a detached `on` worker here would
+                // still allow the menu bar or another CLI invocation to change
+                // the LED during monitoring or race with cleanup.
+                let ownership = try coordinator.acquireTemporaryOwnership()
+                defer { ownership.release() }
+                return try watch(
+                    controller: controller,
+                    watcher: watcherFactory(),
+                    terminationWaiter: terminationWaiterFactory()
+                )
             }
         } catch let error as CLIParseError {
             writeError("capsled: \(error.localizedDescription)\n\n\(CLIParser.usage)")
             return usageError
+        } catch let error as PhysicalCapsLockWatcherError {
+            writeError("capsled: \(error.localizedDescription)")
+            return error.exitStatus
         } catch {
             writeError("capsled: \(error.localizedDescription)")
             return unavailableError
         }
+    }
+
+    private static func watch(
+        controller: CapsLockLEDControlling,
+        watcher: PhysicalCapsLockWatching,
+        terminationWaiter: TerminationWaiting
+    ) throws -> Int32 {
+        let coordinator = LEDWatchCoordinator(
+            controller: controller,
+            reportResult: { mode, result in
+                printResult(mode: mode, result: result)
+            },
+            reportError: { message in
+                writeError(message)
+            }
+        )
+
+        var watcherPrepared = false
+        var ownsLED = false
+        defer {
+            // Stop raw input first and wait for its callbacks, then drain every
+            // accepted LED toggle before Auto. Reversing this order could let a
+            // late queued On write replace the cleanup value.
+            if watcherPrepared {
+                watcher.stopAndWait()
+            }
+            coordinator.stopAndWait()
+            if ownsLED {
+                restoreAutomatic(using: controller)
+            }
+        }
+
+        // Permission and device discovery finish before the LED snapshot, but
+        // raw callbacks do not start yet. This defines an unambiguous monitoring
+        // boundary: the snapshot is the baseline immediately before activation,
+        // so a Caps press cannot both change that baseline and be applied again.
+        try watcher.prepare()
+        watcherPrepared = true
+
+        // Seed from the effective LED state without writing it. `watch` should
+        // change the LED only after a physical Caps Lock press; an existing
+        // manual On override must not be cleared merely by starting monitoring.
+        let initialMode: LEDMode = try ExternalServiceRetry.perform {
+            try controller.isLEDOn() ? .on : .off
+        }
+        ownsLED = true
+        coordinator.start(initialMode: initialMode)
+        watcher.activate {
+            coordinator.toggle()
+        }
+
+        print("capsled: watching physical Caps Lock presses (press Control-C to stop)")
+        let signalNumber = terminationWaiter.wait()
+        return 128 + signalNumber
     }
 
     private static func run(
@@ -169,6 +242,32 @@ public enum CapsLEDApplication {
         guard let data = "\(message)\n".data(using: .utf8) else { return }
         try? FileHandle.standardError.write(contentsOf: data)
     }
+}
+
+/// Test-only default for the internal execution seam. Production entry points
+/// always inject `PersistentLEDOnProcessManager`; keeping the inert default here
+/// lets lifecycle checks isolate `watch` without creating per-user lock files or
+/// detached processes as a side effect of a fake-backend test.
+struct InactivePersistentLEDOnManager: PersistentLEDOnManaging {
+    func start() throws -> PersistentLEDOnStartResult {
+        .started(
+            LEDUpdateResult(
+                matchedKeyboards: 0,
+                targetedKeyboards: 0,
+                successfulWrites: 0
+            )
+        )
+    }
+
+    func stop() throws {}
+
+    func acquireExclusiveOwnership() throws -> PersistentLEDOwnership {
+        InactivePersistentLEDOwnership()
+    }
+}
+
+private final class InactivePersistentLEDOwnership: PersistentLEDOwnership {
+    func release() {}
 }
 
 private final class SignalForwarder {
