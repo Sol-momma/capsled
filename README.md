@@ -63,11 +63,14 @@ capsled auto
 capsled run -- npm test
 ```
 
-- `on` and `off` perform one LED write. macOS may overwrite that shared value
-  on a later keyboard-state update.
-- `auto` returns LED control to macOS.
+- `on` starts one background maintainer and returns. It repairs a macOS `Off`
+  overwrite until `off`, `auto`, or `run` stops it.
+- `off` stops that maintainer and performs one `Off` write. macOS may overwrite
+  the shared value on a later keyboard-state update.
+- `auto` stops that maintainer and returns LED control to macOS.
 - `run` keeps the LED on while the child command runs, repairs a macOS `Off`
-  overwrite, then returns the LED to `auto`.
+  overwrite, then returns the LED to `auto`. It replaces a prior persistent
+  `on` rather than restoring it after the child exits.
 
 For example:
 
@@ -111,10 +114,10 @@ keyboard service. This may light an attached keyboard as well.
 - This project uses the unsupported `HIDCapsLockLED` event-system property from
   Apple's IOHIDFamily implementation. It may stop working in a future macOS
   release.
-- `run` checks the effective LED state every 10 ms. A macOS overwrite can still
-  produce a very short dark interval before it is repaired.
-- `run` cannot restore `auto` after SIGKILL, a crash, or power loss. Run
-  `capsled auto` to recover.
+- `on` and `run` check the effective LED state every 10 ms. A macOS overwrite
+  can still produce a very short dark interval before it is repaired.
+- The background `on` maintainer and `run` cannot restore `auto` after SIGKILL,
+  a crash, or power loss. Run `capsled auto` to recover.
 - Release binaries are ad-hoc signed but are not Developer ID signed or
   notarized. macOS may show a security warning depending on how they are
   downloaded.
@@ -134,12 +137,16 @@ Build and package the Universal Binary:
 scripts/build-release.sh
 ```
 
-The parser check does not touch hardware:
+The checks below do not touch hardware:
 
 ```sh
 swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
   -o .build/capsled-parser-check
 .build/capsled-parser-check
+
+swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
+  -o .build/capsled-on-persistence-check
+.build/capsled-on-persistence-check
 ```
 
 Security reports are described in [SECURITY.md](SECURITY.md). Contributions are

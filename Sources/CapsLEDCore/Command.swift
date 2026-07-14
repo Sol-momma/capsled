@@ -38,7 +38,7 @@ public enum CLIParser {
       capsled run -- <command> [arguments...]
 
     Commands:
-      on      Force the physical Caps Lock LED on.
+      on      Keep the physical Caps Lock LED on in the background.
       off     Force the physical Caps Lock LED off.
       auto    Return LED ownership to macOS.
       run     Keep the LED on while a child command runs, then return to auto.
