@@ -9,6 +9,11 @@ enum PersistentLEDOnStartResult: Equatable {
 protocol PersistentLEDOnManaging {
     func start() throws -> PersistentLEDOnStartResult
     func stop() throws
+    func acquireExclusiveOwnership() throws -> PersistentLEDOwnership
+}
+
+protocol PersistentLEDOwnership: AnyObject {
+    func release()
 }
 
 enum PersistentLEDOnError: LocalizedError {
@@ -186,6 +191,25 @@ final class PersistentLEDOnProcessManager: PersistentLEDOnManaging {
         }
     }
 
+    func acquireExclusiveOwnership() throws -> PersistentLEDOwnership {
+        try prepareRuntimeDirectory()
+        let descriptor = try openLockFile(at: operationLockURL)
+
+        do {
+            try acquireOperationLock(descriptor)
+
+            // Keep the operation lock after draining a persistent worker. The
+            // caller holds it through its final HID write, closing both races:
+            // a run cannot begin during Off/Auto, and no menu or CLI command can
+            // change ownership before run's final Auto write has completed.
+            try stopWhileLocked()
+            return FileLockOwnership(descriptor: descriptor)
+        } catch {
+            close(descriptor)
+            throw error
+        }
+    }
+
     private func stopWhileLocked() throws {
         let descriptor = try openLockFile()
         defer { close(descriptor) }
@@ -301,10 +325,15 @@ final class PersistentLEDOnProcessManager: PersistentLEDOnManaging {
         let descriptor = try openLockFile(at: operationLockURL)
         defer { close(descriptor) }
 
+        try acquireOperationLock(descriptor)
+        defer { flock(descriptor, LOCK_UN) }
+        return try operation()
+    }
+
+    private func acquireOperationLock(_ descriptor: Int32) throws {
         for attempt in 0..<Self.retryLimit {
             if try acquireLockIfAvailable(descriptor) {
-                defer { flock(descriptor, LOCK_UN) }
-                return try operation()
+                return
             }
 
             guard attempt + 1 < Self.retryLimit else { break }
@@ -415,6 +444,28 @@ final class PersistentLEDOnProcessManager: PersistentLEDOnManaging {
 
     private func clearLockFile(_ descriptor: Int32) {
         _ = ftruncate(descriptor, 0)
+    }
+}
+
+private final class FileLockOwnership: PersistentLEDOwnership {
+    private var descriptor: Int32
+
+    init(descriptor: Int32) {
+        self.descriptor = descriptor
+    }
+
+    func release() {
+        guard descriptor != -1 else { return }
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+        descriptor = -1
+    }
+
+    deinit {
+        // Explicit release normally follows the caller's final HID write. The
+        // deinit fallback prevents an early thrown error from leaking the
+        // descriptor and blocking future ownership changes in this process.
+        release()
     }
 }
 
