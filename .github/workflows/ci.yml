@@ -26,6 +26,12 @@ jobs:
             -o .build/capsled-parser-check
           .build/capsled-parser-check
 
+      - name: Check persistent On coordination
+        run: |
+          swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
+            -o .build/capsled-on-persistence-check
+          .build/capsled-on-persistence-check
+
       - name: Check distribution scripts
         run: |
           sh -n install.sh

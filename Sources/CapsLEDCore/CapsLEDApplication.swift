@@ -9,16 +9,64 @@ public enum CapsLEDApplication {
         arguments: [String],
         controller: CapsLockLEDControlling = EventSystemCapsLockLEDController()
     ) -> Int32 {
+        if arguments.first == PersistentLEDOnProcessManager.workerCommand {
+            do {
+                let request = try PersistentLEDOnProcessManager.parseWorkerRequest(arguments)
+                return PersistentLEDOnWorker(
+                    lockURL: request.lockURL,
+                    readinessURL: request.readinessURL,
+                    acknowledgementURL: request.acknowledgementURL,
+                    controller: controller
+                ).run()
+            } catch {
+                writeError("capsled: \(error.localizedDescription)")
+                return unavailableError
+            }
+        }
+
+        do {
+            let persistentOnManager = try PersistentLEDOnProcessManager()
+            return execute(
+                arguments: arguments,
+                controller: controller,
+                persistentOnManager: persistentOnManager
+            )
+        } catch {
+            writeError("capsled: \(error.localizedDescription)")
+            return unavailableError
+        }
+    }
+
+    static func execute(
+        arguments: [String],
+        controller: CapsLockLEDControlling,
+        persistentOnManager: PersistentLEDOnManaging
+    ) -> Int32 {
         do {
             switch try CLIParser.parse(arguments) {
             case .help:
                 print(CLIParser.usage)
                 return 0
             case let .set(mode):
+                if mode == .on {
+                    switch try persistentOnManager.start() {
+                    case let .started(result):
+                        printResult(mode: mode, result: result)
+                    case .alreadyRunning:
+                        print("capsled: already forced on (maintainer is running)")
+                    }
+                    return 0
+                }
+
+                // Stop and drain the persistent On repair before writing Off or
+                // Auto. Reversing these operations would let an in-flight repair
+                // relight the LED after this command has reported success.
+                try persistentOnManager.stop()
                 let result = try controller.setMode(mode)
                 printResult(mode: mode, result: result)
                 return 0
             case let .run(command):
+                try persistentOnManager.stop()
                 return try run(command, controller: controller)
             }
         } catch let error as CLIParseError {

@@ -61,10 +61,13 @@ capsled auto
 capsled run -- npm test
 ```
 
-- `on`と`off`はLEDへ1回だけ書き込みます。その後macOSに上書きされる場合があります。
-- `auto`はLED制御をmacOSへ戻します。
+- `on`はバックグラウンドmaintainerを1つ起動して終了します。`off`、`auto`、`run`で
+  停止するまで、macOSによる`Off`上書きを修復します。
+- `off`はmaintainerを停止して`Off`を1回書き込みます。その後macOSに上書きされる
+  場合があります。
+- `auto`はmaintainerを停止してLED制御をmacOSへ戻します。
 - `run`は子コマンドの実行中に点灯を維持し、macOSによる`Off`上書きを修復して、
-  終了後に`auto`へ戻します。
+  終了後に`auto`へ戻します。先に`on`を実行していた場合、その常時点灯は復元しません。
 
 例：
 
@@ -107,10 +110,10 @@ rm "$HOME/.local/bin/capsled" # 任意の配置先を使った場合は、その
 
 - Apple IOHIDFamily実装の非公開`HIDCapsLockLED`プロパティを使用します。将来の
   macOSで動作しなくなる可能性があります。
-- `run`は10msごとに実際のLED状態を確認します。macOSによる上書きから再点灯まで、
-  ごく短時間だけ消灯する可能性があります。
-- SIGKILL、クラッシュ、電源断では`auto`へ戻せません。その場合は
-  `capsled auto`を実行してください。
+- `on`と`run`は10msごとに実際のLED状態を確認します。macOSによる上書きから
+  再点灯まで、ごく短時間だけ消灯する可能性があります。
+- バックグラウンドの`on` maintainerと`run`は、SIGKILL、クラッシュ、電源断では
+  `auto`へ戻せません。その場合は`capsled auto`を実行してください。
 - 配布バイナリはad-hoc署名済みですが、Developer ID署名・公証は未実施です。
   取得方法によってはmacOSが警告を表示する可能性があります。
 
@@ -129,12 +132,16 @@ Universal Binaryの生成と梱包：
 scripts/build-release.sh
 ```
 
-ハードウェアへ触れないパーサ確認：
+ハードウェアへ触れない確認：
 
 ```sh
 swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
   -o .build/capsled-parser-check
 .build/capsled-parser-check
+
+swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
+  -o .build/capsled-on-persistence-check
+.build/capsled-on-persistence-check
 ```
 
 脆弱性の報告方法は[SECURITY.md](SECURITY.md)を参照してください。Issueと
