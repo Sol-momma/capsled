@@ -9,22 +9,42 @@ public enum CapsLEDApplication {
         arguments: [String],
         controller: CapsLockLEDControlling = EventSystemCapsLockLEDController()
     ) -> Int32 {
-        execute(
-            arguments: arguments,
-            controller: controller,
-            watcherFactory: { RawHIDPhysicalCapsLockWatcher() },
-            terminationWaiterFactory: { TerminationSignalWaiter() }
-        )
+        if arguments.first == PersistentLEDOnProcessManager.workerCommand {
+            do {
+                let request = try PersistentLEDOnProcessManager.parseWorkerRequest(arguments)
+                return PersistentLEDOnWorker(
+                    lockURL: request.lockURL,
+                    readinessURL: request.readinessURL,
+                    acknowledgementURL: request.acknowledgementURL,
+                    controller: controller
+                ).run()
+            } catch {
+                writeError("capsled: \(error.localizedDescription)")
+                return unavailableError
+            }
+        }
+
+        do {
+            let persistentOnManager = try PersistentLEDOnProcessManager()
+            return execute(
+                arguments: arguments,
+                controller: controller,
+                persistentOnManager: persistentOnManager,
+                watcherFactory: { RawHIDPhysicalCapsLockWatcher() },
+                terminationWaiterFactory: { TerminationSignalWaiter() }
+            )
+        } catch {
+            writeError("capsled: \(error.localizedDescription)")
+            return unavailableError
+        }
     }
 
-    /// Internal dependency seam for lifecycle tests. Factories are evaluated
-    /// only after parsing selects `watch`, so malformed or LED-only commands
-    /// never create an input monitor or trigger a permission request.
     static func execute(
         arguments: [String],
         controller: CapsLockLEDControlling,
-        watcherFactory: () -> PhysicalCapsLockWatching,
-        terminationWaiterFactory: () -> TerminationWaiting
+        persistentOnManager: PersistentLEDOnManaging = InactivePersistentLEDOnManager(),
+        watcherFactory: () -> PhysicalCapsLockWatching = { RawHIDPhysicalCapsLockWatcher() },
+        terminationWaiterFactory: () -> TerminationWaiting = { TerminationSignalWaiter() }
     ) -> Int32 {
         do {
             switch try CLIParser.parse(arguments) {
@@ -32,12 +52,32 @@ public enum CapsLEDApplication {
                 print(CLIParser.usage)
                 return 0
             case let .set(mode):
+                if mode == .on {
+                    switch try persistentOnManager.start() {
+                    case let .started(result):
+                        printResult(mode: mode, result: result)
+                    case .alreadyRunning:
+                        print("capsled: already forced on (maintainer is running)")
+                    }
+                    return 0
+                }
+
+                // Stop and drain the persistent On repair before writing Off or
+                // Auto. Reversing these operations would let an in-flight repair
+                // relight the LED after this command has reported success.
+                try persistentOnManager.stop()
                 let result = try controller.setMode(mode)
                 printResult(mode: mode, result: result)
                 return 0
             case let .run(command):
+                try persistentOnManager.stop()
                 return try run(command, controller: controller)
             case .watch:
+                // `watch` temporarily owns the LED and always restores Auto on
+                // exit. Stop a detached `on` worker before taking the baseline;
+                // otherwise both processes could race to rewrite the same HID
+                // value and the first physical press would appear ineffective.
+                try persistentOnManager.stop()
                 return try watch(
                     controller: controller,
                     watcher: watcherFactory(),
@@ -186,6 +226,24 @@ public enum CapsLEDApplication {
         guard let data = "\(message)\n".data(using: .utf8) else { return }
         try? FileHandle.standardError.write(contentsOf: data)
     }
+}
+
+/// Test-only default for the internal execution seam. Production entry points
+/// always inject `PersistentLEDOnProcessManager`; keeping the inert default here
+/// lets lifecycle checks isolate `watch` without creating per-user lock files or
+/// detached processes as a side effect of a fake-backend test.
+struct InactivePersistentLEDOnManager: PersistentLEDOnManaging {
+    func start() throws -> PersistentLEDOnStartResult {
+        .started(
+            LEDUpdateResult(
+                matchedKeyboards: 0,
+                targetedKeyboards: 0,
+                successfulWrites: 0
+            )
+        )
+    }
+
+    func stop() throws {}
 }
 
 private final class SignalForwarder {

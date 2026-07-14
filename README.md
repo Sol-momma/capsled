@@ -66,13 +66,17 @@ capsled run -- npm test
 capsled watch
 ```
 
-- `on` and `off` perform one LED write. macOS may overwrite that shared value
-  on a later keyboard-state update.
-- `auto` returns LED control to macOS.
+- `on` starts one background maintainer and returns. It repairs a macOS `Off`
+  overwrite until `off`, `auto`, or `run` stops it.
+- `off` stops that maintainer and performs one `Off` write. macOS may overwrite
+  the shared value on a later keyboard-state update.
+- `auto` stops that maintainer and returns LED control to macOS.
 - `run` keeps the LED on while the child command runs, repairs a macOS `Off`
-  overwrite, then returns the LED to `auto`.
+  overwrite, then returns the LED to `auto`. It replaces a prior persistent
+  `on` rather than restoring it after the child exits.
 - `watch` preserves the current LED state until the first physical Caps Lock
   press, toggles it on each press, and returns the LED to `auto` when stopped.
+  It also replaces a prior persistent `on` rather than restoring it on exit.
   It reads the raw Caps Lock HID usage instead of a transformed Control key
   code so the two can be distinguished on supported hardware; it does not alter
   or suppress either key event. Raw detection remains experimental.
@@ -119,26 +123,28 @@ rm "$HOME/.local/bin/capsled" # Replace this path if a custom directory was used
 
 | Environment | Keyboard | Result |
 | --- | --- | --- |
-| Apple Silicon, macOS 26.5.1 | Built-in, Caps Lock remapped to Control | Verified |
+| Apple Silicon, macOS 26.5.1 | Built-in, Caps Lock remapped to Control | LED control and raw `watch` toggle verified |
 | Intel Mac | Built-in | Universal Binary builds; hardware not verified |
 | External keyboards | Varies | Not verified |
 
 When no built-in keyboard can be identified, `capsled` falls back to every
 keyboard service. This may light an attached keyboard as well.
 
-The table describes LED control. Raw physical-key detection used by `watch` is
-still experimental and has not yet been verified across the listed hardware.
+Raw physical-key detection used by `watch` is still experimental. It has been
+verified only on the built-in Apple Silicon keyboard listed above; other
+hardware remains unverified.
 
 ## Important limitations
 
 - This project uses the unsupported `HIDCapsLockLED` event-system property from
   Apple's IOHIDFamily implementation. It may stop working in a future macOS
   release.
-- `run` and the On state of `watch` check the effective LED state every 10 ms.
+- `on`, `run`, and the On state of `watch` check the effective LED state every
+  10 ms.
   A macOS overwrite can still produce a very short dark interval before it is
   repaired.
-- `run` and `watch` cannot restore `auto` after SIGKILL, a crash, or power loss.
-  Run `capsled auto` to recover.
+- The background `on` maintainer, `run`, and `watch` cannot restore `auto` after
+  SIGKILL, a crash, or power loss. Run `capsled auto` to recover.
 - Release binaries are ad-hoc signed but are not Developer ID signed or
   notarized. macOS may show a security warning depending on how they are
   downloaded.
@@ -158,12 +164,16 @@ Build and package the Universal Binary:
 scripts/build-release.sh
 ```
 
-The parser check does not touch hardware:
+The checks below do not touch hardware:
 
 ```sh
 swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
   -o .build/capsled-parser-check
 .build/capsled-parser-check
+
+swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
+  -o .build/capsled-on-persistence-check
+.build/capsled-on-persistence-check
 ```
 
 The watch lifecycle check also uses fake keyboard and LED backends and does not

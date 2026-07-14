@@ -88,16 +88,29 @@ enum WatchBehaviorCheck {
             onRead: { log.append("read") },
             onSet: { log.append("set:\($0.rawValue)") }
         )
+        let persistentOnManager = FakePersistentOnManager {
+            log.append("stop-persistent-on")
+        }
         let watcher = FakeWatcher(onLifecycle: { log.append($0) })
 
         _ = CapsLEDApplication.execute(
             arguments: ["watch"],
             controller: controller,
+            persistentOnManager: persistentOnManager,
             watcherFactory: { watcher },
             terminationWaiterFactory: { FakeTerminationWaiter { SIGINT } }
         )
 
-        precondition(log.values == ["prepare", "read", "activate", "stop", "set:auto"])
+        precondition(
+            log.values == [
+                "stop-persistent-on",
+                "prepare",
+                "read",
+                "activate",
+                "stop",
+                "set:auto",
+            ]
+        )
     }
 
     private static func checkInitialOnStateIsNotChangedBeforePress() {
@@ -401,5 +414,21 @@ private final class FakeTerminationWaiter: TerminationWaiting {
 
     func wait() -> Int32 {
         result()
+    }
+}
+
+private final class FakePersistentOnManager: PersistentLEDOnManaging {
+    private let onStop: () -> Void
+
+    init(onStop: @escaping () -> Void) {
+        self.onStop = onStop
+    }
+
+    func start() throws -> PersistentLEDOnStartResult {
+        preconditionFailure("watch must never start the persistent On maintainer")
+    }
+
+    func stop() throws {
+        onStop()
     }
 }

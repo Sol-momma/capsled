@@ -32,6 +32,12 @@ jobs:
             -o .build/capsled-watch-behavior-check
           .build/capsled-watch-behavior-check
 
+      - name: Check persistent On coordination
+        run: |
+          swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
+            -o .build/capsled-on-persistence-check
+          .build/capsled-on-persistence-check
+
       - name: Check distribution scripts
         run: |
           sh -n install.sh
