@@ -15,8 +15,23 @@ would otherwise be unused.
 
 ## Install
 
-The installer downloads the latest Universal Binary (Apple Silicon + Intel),
-verifies its SHA-256 checksum, and places it in `~/.local/bin`:
+### Homebrew
+
+If you already use Homebrew, install with:
+
+```sh
+brew install Sol-momma/tap/capsled
+```
+
+This provides Homebrew-managed upgrades and removal without installing Swift or
+Xcode as a dependency.
+
+### Smallest footprint
+
+For the smallest footprint—or if Homebrew is not installed—use the standalone
+installer. It downloads the latest Universal Binary (Apple Silicon + Intel),
+verifies its SHA-256 checksum, places it in `~/.local/bin`, and removes the
+temporary download. Only the approximately 289 KiB executable remains:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Sol-momma/capsled/main/install.sh | sh
@@ -64,8 +79,16 @@ The wrapped command's exit status is preserved.
 
 ## Update and uninstall
 
-Run the installer again to update. To uninstall, first restore automatic LED
-control, then remove the executable:
+With Homebrew:
+
+```sh
+brew upgrade Sol-momma/tap/capsled
+capsled auto
+brew uninstall Sol-momma/tap/capsled
+```
+
+With the standalone installer, run it again to update. To uninstall, first
+restore automatic LED control, then remove the executable:
 
 ```sh
 capsled auto

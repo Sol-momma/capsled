@@ -14,8 +14,22 @@ Controlへ割り当てている環境でも利用できます。
 
 ## インストール
 
-次のコマンドは最新のUniversal Binary（Apple Silicon＋Intel）を取得し、
-SHA-256を検証して`~/.local/bin`へ配置します。
+### Homebrew
+
+Homebrewをすでに使っている場合：
+
+```sh
+brew install Sol-momma/tap/capsled
+```
+
+SwiftやXcodeを依存関係として追加せず、更新・削除をHomebrewで管理できます。
+
+### 最小容量
+
+容量を最小にしたい場合、またはHomebrew未導入の場合は、単体インストーラが
+おすすめです。最新のUniversal Binary（Apple Silicon＋Intel）を取得し、
+SHA-256を検証して`~/.local/bin`へ配置したあと、一時ファイルを削除します。
+残るのは約289KiBの実行ファイルだけです。
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Sol-momma/capsled/main/install.sh | sh
@@ -62,7 +76,16 @@ capsled run -- sleep 30
 
 ## 更新・アンインストール
 
-更新はインストーラを再実行します。削除前にLEDを自動制御へ戻してください。
+Homebrewの場合：
+
+```sh
+brew upgrade Sol-momma/tap/capsled
+capsled auto
+brew uninstall Sol-momma/tap/capsled
+```
+
+単体インストーラの場合は、再実行すると更新できます。削除前にLEDを自動制御へ
+戻してください。
 
 ```sh
 capsled auto
