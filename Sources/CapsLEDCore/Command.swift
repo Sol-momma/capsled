@@ -20,6 +20,7 @@ public enum LEDMode: String, Equatable {
 public enum CLICommand: Equatable {
     case set(LEDMode)
     case run([String])
+    case watch
     case help
 }
 
@@ -36,12 +37,14 @@ public enum CLIParser {
       capsled off
       capsled auto
       capsled run -- <command> [arguments...]
+      capsled watch
 
     Commands:
       on      Force the physical Caps Lock LED on.
       off     Force the physical Caps Lock LED off.
       auto    Return LED ownership to macOS.
       run     Keep the LED on while a child command runs, then return to auto.
+      watch   Toggle the LED when the physical Caps Lock key is pressed.
     """
 
     public static func parse(_ arguments: [String]) throws -> CLICommand {
@@ -66,6 +69,9 @@ public enum CLIParser {
                 throw CLIParseError(message: "capsled run requires a command")
             }
             return .run(childArguments)
+        case "watch":
+            try requireNoTrailingArguments(arguments)
+            return .watch
         case "help", "-h", "--help":
             return .help
         default:
