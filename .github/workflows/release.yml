@@ -20,6 +20,9 @@ jobs:
           persist-credentials: false
 
       - name: Build Universal Binary and checksum
+        env:
+          CAPSLED_VERSION: ${{ github.ref_name }}
+          CAPSLED_BUILD_VERSION: ${{ github.run_number }}
         run: scripts/build-release.sh
 
       - name: Publish GitHub Release
@@ -29,6 +32,8 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             .build/distribution/capsled-macos-universal.tar.gz \
             .build/distribution/capsled-macos-universal.tar.gz.sha256 \
+            .build/distribution/capsled-menu-bar-macos-universal.zip \
+            .build/distribution/capsled-menu-bar-macos-universal.zip.sha256 \
             --verify-tag \
             --generate-notes \
             --title "capsled $GITHUB_REF_NAME"

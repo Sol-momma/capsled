@@ -88,9 +88,10 @@ enum WatchBehaviorCheck {
             onRead: { log.append("read") },
             onSet: { log.append("set:\($0.rawValue)") }
         )
-        let persistentOnManager = FakePersistentOnManager {
-            log.append("stop-persistent-on")
-        }
+        let persistentOnManager = FakePersistentOnManager(
+            onAcquire: { log.append("acquire-exclusive-ownership") },
+            onRelease: { log.append("release-exclusive-ownership") }
+        )
         let watcher = FakeWatcher(onLifecycle: { log.append($0) })
 
         _ = CapsLEDApplication.execute(
@@ -103,12 +104,13 @@ enum WatchBehaviorCheck {
 
         precondition(
             log.values == [
-                "stop-persistent-on",
+                "acquire-exclusive-ownership",
                 "prepare",
                 "read",
                 "activate",
                 "stop",
                 "set:auto",
+                "release-exclusive-ownership",
             ]
         )
     }
@@ -418,10 +420,12 @@ private final class FakeTerminationWaiter: TerminationWaiting {
 }
 
 private final class FakePersistentOnManager: PersistentLEDOnManaging {
-    private let onStop: () -> Void
+    private let onAcquire: () -> Void
+    private let onRelease: () -> Void
 
-    init(onStop: @escaping () -> Void) {
-        self.onStop = onStop
+    init(onAcquire: @escaping () -> Void, onRelease: @escaping () -> Void) {
+        self.onAcquire = onAcquire
+        self.onRelease = onRelease
     }
 
     func start() throws -> PersistentLEDOnStartResult {
@@ -429,6 +433,23 @@ private final class FakePersistentOnManager: PersistentLEDOnManaging {
     }
 
     func stop() throws {
-        onStop()
+        preconditionFailure("watch must reserve ownership instead of calling stop directly")
+    }
+
+    func acquireExclusiveOwnership() throws -> PersistentLEDOwnership {
+        onAcquire()
+        return FakePersistentLEDOwnership(onRelease: onRelease)
+    }
+}
+
+private final class FakePersistentLEDOwnership: PersistentLEDOwnership {
+    private let onRelease: () -> Void
+
+    init(onRelease: @escaping () -> Void) {
+        self.onRelease = onRelease
+    }
+
+    func release() {
+        onRelease()
     }
 }

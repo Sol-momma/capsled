@@ -2,8 +2,8 @@
 
 [日本語](README.ja.md) | English
 
-`capsled` is an experimental macOS CLI that turns the physical Caps Lock LED
-into a process-running indicator without changing the logical Caps Lock state.
+`capsled` is an experimental macOS menu-bar app and CLI that turns the physical
+Caps Lock LED into a process-running indicator without changing the logical Caps Lock state.
 It is useful when the physical Caps Lock key is remapped to Control but its LED
 would otherwise be unused.
 
@@ -16,6 +16,17 @@ would otherwise be unused.
   command; `on`, `off`, `auto`, and `run` do not require it
 
 ## Install
+
+### Menu-bar app
+
+Download `capsled-menu-bar-macos-universal.zip` from the
+[latest release](https://github.com/Sol-momma/capsled/releases/latest), unzip it,
+and move `CapsLED.app` to Applications. The status item offers persistent On,
+Off, and macOS-controlled modes; no terminal is required.
+
+The app is currently ad-hoc signed rather than Developer ID signed and notarized.
+macOS may block an ordinary double-click after download. For the first launch,
+Control-click `CapsLED.app`, choose **Open**, then confirm **Open**.
 
 ### Homebrew
 
@@ -33,7 +44,7 @@ Xcode as a dependency.
 For the smallest footprint—or if Homebrew is not installed—use the standalone
 installer. It downloads the latest Universal Binary (Apple Silicon + Intel),
 verifies its SHA-256 checksum, places it in `~/.local/bin`, and removes the
-temporary download. Only the approximately 289 KiB executable remains:
+temporary download. Only the standalone executable remains:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Sol-momma/capsled/main/install.sh | sh
@@ -57,6 +68,15 @@ Writing to a system directory such as `/usr/local/bin` may require administrator
 permission. Running `capsled` itself does not require root privileges.
 
 ## Usage
+
+### Menu bar
+
+Click the Caps Lock icon and choose **Keep LED On**, **Turn LED Off**, or
+**Return Control to macOS**. Quitting CapsLED first returns control to macOS.
+The app and CLI use the same single background maintainer, so switching between
+them does not create competing workers.
+
+### CLI
 
 ```sh
 capsled on
@@ -145,6 +165,8 @@ hardware remains unverified.
   repaired.
 - The background `on` maintainer, `run`, and `watch` cannot restore `auto` after
   SIGKILL, a crash, or power loss. Run `capsled auto` to recover.
+- The menu status reports the last action completed in the app. Later CLI
+  changes are not mirrored as a continuously synchronized state indicator.
 - Release binaries are ad-hoc signed but are not Developer ID signed or
   notarized. macOS may show a security warning depending on how they are
   downloaded.
@@ -156,13 +178,16 @@ Requires Swift 6:
 ```sh
 swift build -c release
 .build/release/capsled --help
+.build/release/CapsLEDMenuBar
 ```
 
-Build and package the Universal Binary:
+Build and package the Universal CLI and `CapsLED.app`:
 
 ```sh
 scripts/build-release.sh
 ```
+
+The archives are written to `.build/distribution`.
 
 The checks below do not touch hardware:
 

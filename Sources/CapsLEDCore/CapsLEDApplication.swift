@@ -9,19 +9,11 @@ public enum CapsLEDApplication {
         arguments: [String],
         controller: CapsLockLEDControlling = EventSystemCapsLockLEDController()
     ) -> Int32 {
-        if arguments.first == PersistentLEDOnProcessManager.workerCommand {
-            do {
-                let request = try PersistentLEDOnProcessManager.parseWorkerRequest(arguments)
-                return PersistentLEDOnWorker(
-                    lockURL: request.lockURL,
-                    readinessURL: request.readinessURL,
-                    acknowledgementURL: request.acknowledgementURL,
-                    controller: controller
-                ).run()
-            } catch {
-                writeError("capsled: \(error.localizedDescription)")
-                return unavailableError
-            }
+        if let workerStatus = executeWorkerIfRequested(
+            arguments: arguments,
+            controller: controller
+        ) {
+            return workerStatus
         }
 
         do {
@@ -39,6 +31,34 @@ public enum CapsLEDApplication {
         }
     }
 
+    /// Runs the hidden persistent-On worker before a CLI or AppKit entry point
+    /// initializes its ordinary user interface. Returning nil means the process
+    /// was not launched as a worker and should continue normal startup.
+    public static func executeWorkerIfRequested(
+        arguments: [String],
+        controller: CapsLockLEDControlling? = nil
+    ) -> Int32? {
+        guard arguments.first == PersistentLEDOnProcessManager.workerCommand else {
+            return nil
+        }
+
+        do {
+            let request = try PersistentLEDOnProcessManager.parseWorkerRequest(arguments)
+            return PersistentLEDOnWorker(
+                lockURL: request.lockURL,
+                readinessURL: request.readinessURL,
+                acknowledgementURL: request.acknowledgementURL,
+                // A normal GUI launch should not create and immediately discard
+                // an IOHID client just to discover that it is not a worker. Delay
+                // the default controller until the hidden mode is confirmed.
+                controller: controller ?? EventSystemCapsLockLEDController()
+            ).run()
+        } catch {
+            writeError("capsled: \(error.localizedDescription)")
+            return unavailableError
+        }
+    }
+
     static func execute(
         arguments: [String],
         controller: CapsLockLEDControlling,
@@ -47,37 +67,33 @@ public enum CapsLEDApplication {
         terminationWaiterFactory: () -> TerminationWaiting = { TerminationSignalWaiter() }
     ) -> Int32 {
         do {
+            let coordinator = CapsLEDModeCoordinator(
+                controller: controller,
+                persistentOnManager: persistentOnManager
+            )
             switch try CLIParser.parse(arguments) {
             case .help:
                 print(CLIParser.usage)
                 return 0
             case let .set(mode):
-                if mode == .on {
-                    switch try persistentOnManager.start() {
-                    case let .started(result):
-                        printResult(mode: mode, result: result)
-                    case .alreadyRunning:
-                        print("capsled: already forced on (maintainer is running)")
-                    }
-                    return 0
+                switch try coordinator.setMode(mode) {
+                case let .updated(result):
+                    printResult(mode: mode, result: result)
+                case .alreadyOn:
+                    print("capsled: already forced on (maintainer is running)")
                 }
-
-                // Stop and drain the persistent On repair before writing Off or
-                // Auto. Reversing these operations would let an in-flight repair
-                // relight the LED after this command has reported success.
-                try persistentOnManager.stop()
-                let result = try controller.setMode(mode)
-                printResult(mode: mode, result: result)
                 return 0
             case let .run(command):
-                try persistentOnManager.stop()
+                let ownership = try coordinator.acquireTemporaryOwnership()
+                defer { ownership.release() }
                 return try run(command, controller: controller)
             case .watch:
-                // `watch` temporarily owns the LED and always restores Auto on
-                // exit. Stop a detached `on` worker before taking the baseline;
-                // otherwise both processes could race to rewrite the same HID
-                // value and the first physical press would appear ineffective.
-                try persistentOnManager.stop()
+                // Hold the shared operation lock through watch's final Auto
+                // write. Merely stopping a detached `on` worker here would
+                // still allow the menu bar or another CLI invocation to change
+                // the LED during monitoring or race with cleanup.
+                let ownership = try coordinator.acquireTemporaryOwnership()
+                defer { ownership.release() }
                 return try watch(
                     controller: controller,
                     watcher: watcherFactory(),
@@ -244,6 +260,14 @@ struct InactivePersistentLEDOnManager: PersistentLEDOnManaging {
     }
 
     func stop() throws {}
+
+    func acquireExclusiveOwnership() throws -> PersistentLEDOwnership {
+        InactivePersistentLEDOwnership()
+    }
+}
+
+private final class InactivePersistentLEDOwnership: PersistentLEDOwnership {
+    func release() {}
 }
 
 private final class SignalForwarder {

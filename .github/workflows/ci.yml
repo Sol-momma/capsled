@@ -20,6 +20,12 @@ jobs:
       - name: Build release executable
         run: swift build --configuration release
 
+      - name: Check menu-bar coordination
+        run: |
+          swiftc Sources/CapsLEDCore/*.swift Checks/MenuBarCommandCheck.swift \
+            -o .build/capsled-menu-bar-command-check
+          .build/capsled-menu-bar-command-check
+
       - name: Check command parser
         run: |
           swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
@@ -42,3 +48,14 @@ jobs:
         run: |
           sh -n install.sh
           bash -n scripts/build-release.sh
+          plutil -lint Support/CapsLEDMenuBar-Info.plist
+
+      - name: Build distribution archives
+        env:
+          CAPSLED_VERSION: 0.0.0
+        run: |
+          scripts/build-release.sh
+          cd .build/distribution
+          shasum -a 256 -c capsled-macos-universal.tar.gz.sha256
+          shasum -a 256 -c capsled-menu-bar-macos-universal.zip.sha256
+          unzip -tq capsled-menu-bar-macos-universal.zip
