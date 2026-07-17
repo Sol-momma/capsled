@@ -2,122 +2,88 @@
 
 日本語 | [English](README.md)
 
-`capsled`は、物理Caps Lock LEDを処理中インジケーターとして使う実験的な
-macOSメニューバーアプリ兼CLIです。論理的なCaps Lock状態は変更しないため、
-物理Caps LockキーをControlへ割り当てている環境でも利用できます。
+`capsled`は、論理的なCaps Lock状態を変更せず、物理Caps Lock LEDを再利用できる
+macOS用ツールです。物理Caps LockキーをControlへ割り当てつつ、LEDも活用したい
+場合に使えます。
+
+## すぐ使う
+
+やりたい操作に合わせて、まず次の2つから選びます。
+
+### 1. 物理Caps LockキーでLEDを切り替える
+
+HomebrewでCLIをインストールし、監視を開始します。
+
+```sh
+brew install Sol-momma/tap/capsled
+capsled watch
+```
+
+物理Caps Lockキーを押すたびにLEDが切り替わります。終了するときはControl-Cを
+押してください。終了時にLED制御をmacOSへ戻します。
+
+初回は`capsled`の**システム設定 > プライバシーとセキュリティ > 入力監視**を
+許可し、`capsled watch`を再実行してください。物理キーをraw入力として監視しますが、
+キー入力の変更や遮断は行いません。
+
+### 2. メニューバーからLEDを操作する
+
+[最新リリース](https://github.com/Sol-momma/capsled/releases/latest)から
+`capsled-menu-bar-macos-universal.zip`を取得・展開し、`CapsLED.app`を
+「アプリケーション」へ移動します。メニューバーのCaps Lockアイコンから
+**LEDを点灯し続ける**、**LEDを消灯する**、**macOSへ制御を戻す**を選べます。
+
+現在はad-hoc署名のみで、Developer ID署名・公証は未実施です。初回は
+`CapsLED.app`をControl＋クリックして**開く**を選び、確認画面でも**開く**を
+押してください。
+
+この手順にはcapsled v0.2.0以降が必要です。既存のHomebrew版で`watch`が認識されない
+場合は更新してください。
+
+```sh
+brew update
+brew upgrade Sol-momma/tap/capsled
+```
 
 ## 必要環境
 
 - macOS 14以降
 - macOSのHIDイベントシステムからCaps Lock LEDを操作できるキーボード
 - root権限、アクセシビリティ権限は不要
-- 入力監視権限が必要なのは実験的な`watch`だけ。`on`、`off`、`auto`、`run`には不要
+- 入力監視権限が必要なのは`watch`のみ。その他のコマンドとメニューバー操作には不要
 
-## インストール
+## その他のCLIコマンド
 
-### メニューバーアプリ
+通常は`watch`から始めます。残りのコマンドは、LEDの固定や処理中表示に使います。
 
-[最新リリース](https://github.com/Sol-momma/capsled/releases/latest)から
-`capsled-menu-bar-macos-universal.zip`を取得・展開し、`CapsLED.app`を
-「アプリケーション」へ移動してください。メニューバーから点灯維持、消灯、
-macOSによる自動制御を選べます。ターミナルは不要です。
-
-現在はad-hoc署名のみで、Developer ID署名・公証は未実施です。ダウンロード後の
-通常のダブルクリックはmacOSに止められる場合があります。初回だけ`CapsLED.app`を
-Control＋クリックして**開く**を選び、確認画面でも**開く**を押してください。
-
-### Homebrew
-
-Homebrewをすでに使っている場合：
-
-```sh
-brew install Sol-momma/tap/capsled
-```
-
-SwiftやXcodeを依存関係として追加せず、更新・削除をHomebrewで管理できます。
-
-### 最小容量
-
-容量を最小にしたい場合、またはHomebrew未導入の場合は、単体インストーラが
-おすすめです。最新のUniversal Binary（Apple Silicon＋Intel）を取得し、
-SHA-256を検証して`~/.local/bin`へ配置したあと、一時ファイルを削除します。
-残るのは単体の実行ファイルだけです。
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/Sol-momma/capsled/main/install.sh | sh
-```
-
-システム共通または任意の場所へ入れる場合は、先に`install.sh`の内容を確認し、
-配置先を指定してください。
-
-```sh
-CAPSLED_INSTALL_DIR=/usr/local/bin sh install.sh
-```
-
-配置先が`PATH`に含まれていることを確認してください。macOS標準のzshでは、
-次を一度実行してから新しいターミナルを開きます。
-
-```sh
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.zshrc"
-```
-
-`/usr/local/bin`などシステム側の場所への配置には、管理者権限が必要な場合が
-あります。`capsled`自体の実行にはroot権限は不要です。
-
-## 使い方
-
-### メニューバー
-
-Caps Lockアイコンを押し、**LEDを点灯し続ける**、**LEDを消灯する**、
-**macOSへ制御を戻す**のいずれかを選びます。CapsLEDを終了するときは、先に
-LED制御をmacOSへ戻します。アプリとCLIは同じ1つのバックグラウンドmaintainerを
-共有するため、両方を使っても競合するworkerは増えません。
-
-### CLI
-
-```sh
-capsled on
-capsled off
-capsled auto
-capsled run -- npm test
-capsled watch
-```
-
-- `on`はバックグラウンドmaintainerを1つ起動して終了します。`off`、`auto`、`run`で
-  停止するまで、macOSによる`Off`上書きを修復します。
-- `off`はmaintainerを停止して`Off`を1回書き込みます。その後macOSに上書きされる
-  場合があります。
-- `auto`はmaintainerを停止してLED制御をmacOSへ戻します。
-- `run`は子コマンドの実行中に点灯を維持し、macOSによる`Off`上書きを修復して、
-  終了後に`auto`へ戻します。先に`on`を実行していた場合、その常時点灯は復元しません。
-- `watch`は最初の物理Caps Lock押下まで現在のLED状態を維持し、押すたびにLEDを
-  切り替え、終了時に`auto`へ戻します。先に`on`を実行していた場合、その常時点灯は
-  復元しません。raw HIDのCaps Lock usageを読むため、
-  Caps LockをControlへ変更した環境でも、対応ハードウェアでは物理Controlと
-  区別できます。キー入力の変更・遮断は行いません。raw検出は実験段階です。
+| コマンド | 用途 |
+| --- | --- |
+| `capsled on` | バックグラウンドでLEDの点灯を維持します。 |
+| `capsled off` | 点灯維持を止め、LEDを一度消灯します。 |
+| `capsled auto` | capsledによる制御を止め、LEDをmacOSへ戻します。 |
+| `capsled run -- <コマンド>` | コマンド実行中だけLEDを点灯し、終了後にmacOSへ戻します。 |
 
 例：
 
 ```sh
-capsled run -- sleep 30
+capsled run -- npm test
 ```
 
-ラップしたコマンドの終了コードは維持されます。
+実行したコマンドの終了コードは維持されます。`on`、`run`、`watch`は互いに置き換わり、
+終了後に以前のモードを復元しません。
 
-実験的な監視を使う場合はフォアグラウンドで実行し、Control-Cで終了します。
+## 困ったとき
 
-```sh
-capsled watch
-```
+- **`watch`が権限を求める：** **システム設定 > プライバシーとセキュリティ >
+  入力監視**で`capsled`を許可し、再実行してください。
+- **クラッシュや電源断のあともLEDが固定されている：** `capsled auto`を実行します。
+- **`watch`が認識されない：** 「すぐ使う」にあるHomebrewの更新コマンドを実行し、
+  `capsled --help`に`watch`が表示されることを確認します。
+- **CapsLED.appを開けない：** 初回だけアプリをControl＋クリックして**開く**を選びます。
 
-初回はmacOSが入力監視権限を求める場合があります。**システム設定 >
-プライバシーとセキュリティ > 入力監視**で実行ファイルを許可してから、コマンドを
-再実行してください。Caps Lockの入力値だけを非exclusiveで受け取りますが、権限は
-必要です。
+## 更新・削除
 
-## 更新・アンインストール
-
-Homebrewの場合：
+Homebrew版：
 
 ```sh
 brew upgrade Sol-momma/tap/capsled
@@ -125,15 +91,13 @@ capsled auto
 brew uninstall Sol-momma/tap/capsled
 ```
 
-単体インストーラの場合は、再実行すると更新できます。削除前にLEDを自動制御へ
-戻してください。
+メニューバー版は**macOSへ制御を戻す**を選び、CapsLEDを終了してから
+「アプリケーション」の`CapsLED.app`を削除します。
 
-```sh
-capsled auto
-rm "$HOME/.local/bin/capsled" # 任意の配置先を使った場合は、そのパスへ変更します。
-```
+Homebrewを使わずCLIを導入する場合は、[高度なインストール方法](docs/advanced-installation.ja.md)
+を参照してください。
 
-## 互換性
+## 対応環境と制限
 
 | 環境 | キーボード | 結果 |
 | --- | --- | --- |
@@ -141,65 +105,25 @@ rm "$HOME/.local/bin/capsled" # 任意の配置先を使った場合は、その
 | Intel Mac | 内蔵 | Universal Binary生成済み、実機未確認 |
 | 外付けキーボード | 機種依存 | 未確認 |
 
-内蔵キーボードを識別できない場合は、すべてのキーボードサービスを対象にします。
-そのため、外付けキーボードのLEDも点灯する可能性があります。
-
-`watch`が使うraw物理キー検出は実験段階です。上記Apple Siliconの内蔵キーボード
-だけで実機確認済みで、ほかのハードウェアは未確認です。
-
-## 重要な制限
-
-- Apple IOHIDFamily実装の非公開`HIDCapsLockLED`プロパティを使用します。将来の
-  macOSで動作しなくなる可能性があります。
+- `watch`が使うraw物理キー検出は実験段階で、上記Apple Siliconの内蔵キーボードだけで
+  実機確認済みです。
+- 内蔵キーボードを識別できない場合は、すべてのキーボードサービスを対象にします。
+  外付けキーボードのLEDも点灯する可能性があります。
+- Apple IOHIDFamily実装の非公開`HIDCapsLockLED`プロパティを使用します。将来のmacOSで
+  動作しなくなる可能性があります。
 - `on`、`run`、`watch`の点灯中は10msごとに実際のLED状態を確認します。macOSによる
   上書きから再点灯まで、ごく短時間だけ消灯する可能性があります。
-- バックグラウンドの`on` maintainer、`run`、`watch`は、SIGKILL、クラッシュ、
-  電源断では`auto`へ戻せません。その場合は`capsled auto`を実行してください。
-- メニューの状態欄はアプリで最後に完了した操作を表示します。その後のCLI操作を
-  常時同期する状態表示ではありません。
+- SIGKILL、クラッシュ、電源断では自動復旧できない場合があります。その場合は
+  `capsled auto`を実行してください。
+- メニューの状態欄はアプリで最後に完了した操作を表示します。その後のCLI操作は
+  常時同期されません。
 - 配布バイナリはad-hoc署名済みですが、Developer ID署名・公証は未実施です。
-  取得方法によってはmacOSが警告を表示する可能性があります。
 
-## ソースからビルド
+## 開発に参加する
 
-Swift 6が必要です。
-
-```sh
-swift build -c release
-.build/release/capsled --help
-.build/release/CapsLEDMenuBar
-```
-
-Universal CLIと`CapsLED.app`の生成・梱包：
-
-```sh
-scripts/build-release.sh
-```
-
-生成物は`.build/distribution`へ出力されます。
-
-ハードウェアへ触れない確認：
-
-```sh
-swiftc Sources/CapsLEDCore/Command.swift Checks/CommandParserCheck.swift \
-  -o .build/capsled-parser-check
-.build/capsled-parser-check
-
-swiftc Sources/CapsLEDCore/*.swift Checks/OnPersistenceCheck.swift \
-  -o .build/capsled-on-persistence-check
-.build/capsled-on-persistence-check
-```
-
-`watch`のライフサイクル確認も、キーボードとLEDのfakeを使うため実機には触れません。
-
-```sh
-swiftc Sources/CapsLEDCore/*.swift Checks/WatchBehaviorCheck.swift \
-  -o .build/capsled-watch-behavior-check
-.build/capsled-watch-behavior-check
-```
-
-脆弱性の報告方法は[SECURITY.md](SECURITY.md)を参照してください。Issueと
-Pull Requestによる貢献を歓迎します。
+ビルド方法とハードウェアに触れない確認手順は[CONTRIBUTING.md](CONTRIBUTING.md)にあります。
+脆弱性の報告方法は[SECURITY.md](SECURITY.md)を参照してください。IssueとPull Requestを
+歓迎します。
 
 ## ライセンス
 

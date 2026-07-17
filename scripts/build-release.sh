@@ -81,11 +81,19 @@ codesign --verify --deep --strict --verbose=2 "$app_dir"
 cp "$repository_root/LICENSE" "$staging_dir/LICENSE"
 cp "$repository_root/README.md" "$staging_dir/README.md"
 cp "$repository_root/README.ja.md" "$staging_dir/README.ja.md"
+cp "$repository_root/CONTRIBUTING.md" "$staging_dir/CONTRIBUTING.md"
+cp "$repository_root/SECURITY.md" "$staging_dir/SECURITY.md"
+cp "$repository_root/install.sh" "$staging_dir/install.sh"
+mkdir -p "$staging_dir/docs"
+cp "$repository_root/docs/advanced-installation.md" \
+    "$staging_dir/docs/advanced-installation.md"
+cp "$repository_root/docs/advanced-installation.ja.md" \
+    "$staging_dir/docs/advanced-installation.ja.md"
 
 # Archive from inside staging so installation always finds `capsled` at the
 # archive root, independent of the checkout or temporary directory name.
 tar -czf "$output_dir/$cli_archive_name" -C "$staging_dir" \
-    capsled LICENSE README.md README.ja.md
+    capsled LICENSE README.md README.ja.md CONTRIBUTING.md SECURITY.md install.sh docs
 ditto -c -k --sequesterRsrc --keepParent \
     "$app_dir" \
     "$output_dir/$menu_archive_name"
